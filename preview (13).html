@@ -1,0 +1,637 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>WORLD INFLUENCE | Command Edition</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#080e19;color:#e9f2ff;font-family:Arial,sans-serif}
+header{height:65px;background:#101c30;border-bottom:1px solid #345477;display:flex;align-items:center;justify-content:space-between;padding:0 17px}
+header h1{font-size:19px;letter-spacing:3px;color:#72bdff}
+button{background:#176bd4;color:white;border:0;border-radius:7px;padding:10px 13px;margin:3px;cursor:pointer;font-weight:bold}
+button:hover{background:#398cff}
+button.red{background:#a53c4b}
+button.gray{background:#293c55}
+input,textarea,select{width:100%;padding:10px;background:#091525;color:white;border:1px solid #355477;border-radius:7px;margin:5px 0}
+#layout{display:none;grid-template-columns:300px 1fr;height:calc(100vh - 65px)}
+aside{background:#101b2c;padding:12px;overflow-y:auto;border-right:1px solid #304867}
+main{position:relative;min-width:0}
+#map{height:100%;width:100%;background:#111d30}
+.panel{background:linear-gradient(145deg,#192c46,#122139);border:1px solid #304c70;border-radius:11px;padding:12px;margin-bottom:11px;box-shadow:0 5px 16px #0003}
+.panel h3{font-size:14px;color:#86caff;margin:0 0 10px}
+.stat{display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #30415a;font-size:13px}
+.stat b{color:#9ed2ff}
+.small{font-size:11px;color:#aabbd0;line-height:1.5}
+#feed{max-height:140px;overflow:auto;font-size:12px}
+#community{max-height:260px;overflow:auto}
+.comment{background:#0b192a;border:1px solid #294360;padding:10px;margin:8px 0;border-radius:8px;overflow-wrap:anywhere}
+.comment b{color:#8bcaff}
+#topbar{position:absolute;z-index:500;top:10px;left:10px;display:flex;gap:6px;flex-wrap:wrap;pointer-events:none}
+.pill{background:#101d31ed;border:1px solid #42658b;border-radius:7px;padding:9px;font-size:12px}
+#menu,#voting,#results,#help,#savePanel{position:fixed;z-index:3000;inset:0;background:#050a13f5;display:flex;align-items:center;justify-content:center;padding:15px}
+.modal{width:min(780px,96vw);max-height:92vh;overflow:auto;background:#13233a;border:1px solid #426b98;border-radius:17px;padding:24px;box-shadow:0 20px 80px #0009}
+.modal h2{color:#77c1ff}
+#menu h1{font-size:42px;letter-spacing:4px;color:#69baff}
+#timer{font-size:34px;color:#74c4ff}
+.choices{display:grid;grid-template-columns:repeat(3,1fr);gap:9px}
+.choice{background:#203651;border:2px solid #385b7f;border-radius:9px;text-align:center;padding:15px;cursor:pointer}
+.choice.selected{border-color:#68baff;background:#164778}
+#countryInfo{font-size:13px;line-height:1.7}
+#mapError{display:none;position:absolute;z-index:900;top:70px;left:10px;right:10px;background:#8d3541;padding:12px;border-radius:8px}
+.leaflet-popup-content-wrapper,.leaflet-popup-tip{background:#172740;color:white}
+.saveRow{display:flex;align-items:center;justify-content:space-between;background:#0d1b2d;padding:10px;margin:7px 0;border-radius:8px;gap:5px}
+@media(max-width:750px){
+ #layout{grid-template-columns:1fr;height:auto}
+ #map{height:60vh}
+ aside{order:2}
+ .choices{grid-template-columns:repeat(2,1fr)}
+}
+</style>
+</head>
+<body>
+
+<header>
+ <h1>WORLD INFLUENCE</h1>
+ <div>
+  <button class="gray" onclick="openSaves()">💾 SAVES</button>
+  <button class="gray" onclick="toggleSound()">🔊</button>
+  <button class="gray" onclick="toggleMusic()">🎵</button>
+  <button onclick="fullScreen()">⛶</button>
+ </div>
+</header>
+
+<div id="menu">
+ <div class="modal" style="text-align:center">
+  <h1>WORLD INFLUENCE</h1>
+  <h2>COMMAND EDITION</h2>
+  <p>Control nations. Build alliances. Shape the world.</p>
+  <input id="nationInput" maxlength="24" value="My Empire" placeholder="Nation name">
+  <button onclick="startVoting()" style="padding:15px 35px;font-size:18px">NEW GAME</button>
+  <button class="gray" onclick="openSaves()">LOAD / COPY GAME</button>
+  <button class="gray" onclick="showHelp()">HOW TO PLAY</button>
+  <p class="small">Your game saves automatically in this browser.</p>
+ </div>
+</div>
+
+<div id="voting" style="display:none">
+ <div class="modal">
+  <h2>🗳️ MAP ELECTION</h2>
+  <p>Vote for the next world map. AI voters also participate.</p>
+  <div id="timer">40</div>
+  <div class="choices" id="choices"></div>
+  <p id="voteStatus" class="small">Choose a map.</p>
+  <button onclick="finishVote()">LOAD WINNING MAP</button>
+ </div>
+</div>
+
+<div id="results" style="display:none">
+ <div class="modal">
+  <h2>🏆 ROUND RESULTS</h2>
+  <div id="resultText"></div>
+  <button onclick="startVoting()">NEXT ROUND</button>
+  <button class="gray" onclick="openSaves()">SAVE GAME</button>
+ </div>
+</div>
+
+<div id="help" style="display:none">
+ <div class="modal">
+  <h2>HOW TO PLAY</h2>
+  <p>• Vote for a map and enter the game.</p>
+  <p>• Click countries to inspect them.</p>
+  <p>• Claim neutral countries or declare war on AI nations.</p>
+  <p>• Recruit soldiers, buy tanks, and defend your land.</p>
+  <p>• Use diplomacy and fictional crisis events.</p>
+  <p>• Save your progress or make copies of your game.</p>
+  <p>• When every country is claimed, the round ends.</p>
+  <button onclick="hideHelp()">CLOSE</button>
+ </div>
+</div>
+
+<div id="savePanel" style="display:none">
+ <div class="modal">
+  <h2>💾 GAME SAVE CENTER</h2>
+  <p class="small">Save slots are stored in this browser on this device.</p>
+  <input id="saveName" maxlength="30" placeholder="Name this save">
+  <button onclick="saveGame()">SAVE CURRENT GAME</button>
+  <button class="gray" onclick="copyGame()">COPY CURRENT GAME</button>
+  <div id="saveList"></div>
+  <button class="gray" onclick="closeSaves()">CLOSE</button>
+ </div>
+</div>
+
+<div id="layout">
+<aside>
+ <div class="panel">
+  <h3>👑 NATION COMMAND</h3>
+  <div class="stat"><span>Nation</span><b id="nationName">My Empire</b></div>
+  <div class="stat"><span>Money</span><b id="money">0</b></div>
+  <div class="stat"><span>Soldiers</span><b id="soldiers">0</b></div>
+  <div class="stat"><span>Tanks</span><b id="tanks">0</b></div>
+  <div class="stat"><span>Strength</span><b id="strength">0</b></div>
+  <div class="stat"><span>Territories</span><b id="land">0</b></div>
+  <button onclick="renameNation()">RENAME NATION</button>
+  <button onclick="superpower()">⚡ SUPERPOWER</button>
+ </div>
+
+ <div class="panel">
+  <h3>🌍 COUNTRY INTELLIGENCE</h3>
+  <div id="countryInfo">Select a country on the map.</div>
+  <button onclick="claimCountry()">CLAIM COUNTRY</button>
+  <button class="red" onclick="declareWar()">DECLARE WAR</button>
+  <button onclick="defendCountry()">DEFEND LAND</button>
+  <button class="gray" onclick="offerPeace()">OFFER PEACE</button>
+ </div>
+
+ <div class="panel">
+  <h3>⚔️ MILITARY COMMAND</h3>
+  <button onclick="recruit()">RECRUIT 1,000</button>
+  <button onclick="buyTanks()">BUY 10 TANKS</button>
+  <button onclick="reinforce()">SEND REINFORCEMENTS</button>
+  <button onclick="recover()">RECOVER STRENGTH</button>
+ </div>
+
+ <div class="panel">
+  <h3>☢️ GLOBAL CRISIS SIMULATOR</h3>
+  <p class="small">Fictional strategic event. Select an enemy country to trigger an abstract crisis and reduce its game resources.</p>
+  <button class="red" onclick="crisisEvent()">TRIGGER CRISIS EVENT</button>
+  <div class="small" id="crisisStatus">No crisis active.</div>
+ </div>
+
+ <div class="panel">
+  <h3>💾 SAVE MANAGEMENT</h3>
+  <button onclick="saveGame()">QUICK SAVE</button>
+  <button class="gray" onclick="openSaves()">LOAD / COPY SAVES</button>
+  <div class="small" id="saveStatus">Autosave enabled.</div>
+ </div>
+
+ <div class="panel">
+  <h3>🔊 AUDIO</h3>
+  <button onclick="toggleSound()">SOUND ON / OFF</button>
+  <button onclick="toggleMusic()">MUSIC ON / OFF</button>
+ </div>
+
+ <div class="panel">
+  <h3>📰 WORLD NEWS</h3>
+  <div id="feed"></div>
+ </div>
+
+ <div class="panel">
+  <h3>🌐 PLAYER COMMUNITY</h3>
+  <input id="username" maxlength="20" placeholder="Username">
+  <textarea id="commentInput" maxlength="300" rows="2" placeholder="Write a comment..."></textarea>
+  <button onclick="postComment()">POST</button>
+  <div id="community"></div>
+  <p class="small">Comments and reactions are saved locally in this browser. Shared online comments require a server.</p>
+ </div>
+
+ <button class="red" onclick="endRound()">END ROUND</button>
+</aside>
+
+<main>
+ <div id="map"></div>
+ <div id="mapError">Map failed to load. Check your internet connection and reload.</div>
+ <div id="topbar">
+  <div class="pill" id="roundLabel">ROUND 1</div>
+  <div class="pill" id="mapLabel">WORLD MAP</div>
+  <div class="pill" id="gameStatus">Loading...</div>
+ </div>
+</main>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+const $=id=>document.getElementById(id);
+const fmt=n=>Math.floor(n).toLocaleString();
+const MAPS=[
+ {name:"World Map",emoji:"🌍",region:"all"},
+ {name:"Americas",emoji:"🌎",region:"americas"},
+ {name:"Europe",emoji:"🌍",region:"europe"},
+ {name:"Asia",emoji:"🌏",region:"asia"},
+ {name:"Africa",emoji:"🌍",region:"africa"},
+ {name:"Random Map",emoji:"🎲",region:"random"}
+];
+const AI=["Northern Union","Blue Republic","Eastern League","Western Federation","Southern Alliance","Central Kingdom","Pacific Coalition","Desert Federation","Island Republic"];
+const COLORS=["#d45a63","#d69b42","#4c9c7c","#9669c7","#bd6d99","#4b9db5","#b0a44c","#707dc9","#a16c51"];
+
+let map=null,geo=null,features=[],countries={},layers={},selected=null;
+let nation={name:"My Empire",money:10000,soldiers:10000,tanks:100,strength:100};
+let chosenMap=MAPS[0],round=1,voteTimer=null,voteSeconds=40,aiTimer=null,roundFinished=false;
+let audio=null,soundOn=true,musicOn=false,musicTimer=null,comments=[];
+let saveSlots={},crisisCooldown=0,alliances=[];
+
+function playTone(freq=400,duration=.14,type="sine",volume=.04){
+ if(!soundOn)return;
+ try{
+  audio=audio||new(window.AudioContext||window.webkitAudioContext)();
+  if(audio.state==="suspended")audio.resume();
+  const o=audio.createOscillator(),g=audio.createGain();
+  o.type=type;o.frequency.setValueAtTime(freq,audio.currentTime);
+  o.frequency.exponentialRampToValueAtTime(Math.max(45,freq*.65),audio.currentTime+duration);
+  g.gain.setValueAtTime(volume,audio.currentTime);
+  g.gain.exponentialRampToValueAtTime(.001,audio.currentTime+duration);
+  o.connect(g);g.connect(audio.destination);o.start();o.stop(audio.currentTime+duration);
+ }catch(e){}
+}
+function battleSound(){
+ playTone(100,.3,"sawtooth",.07);
+ setTimeout(()=>playTone(170,.2,"triangle",.06),160);
+ setTimeout(()=>playTone(90,.3,"sawtooth",.06),300);
+}
+function winSound(){
+ [440,550,660,880].forEach((n,i)=>setTimeout(()=>playTone(n,.22),i*140));
+}
+function toggleSound(){soundOn=!soundOn;playTone(500,.12)}
+function toggleMusic(){
+ musicOn=!musicOn;clearInterval(musicTimer);
+ if(musicOn){
+  const notes=[130,165,196,165,146,175,220,175];let i=0;
+  musicTimer=setInterval(()=>playTone(notes[i++%notes.length],.7,"triangle",.012),850);
+ }
+ playTone(500,.12);
+}
+function fullScreen(){
+ if(!document.fullscreenElement)document.documentElement.requestFullscreen?.();
+ else document.exitFullscreen?.();
+}
+function showHelp(){$("help").style.display="flex"}
+function hideHelp(){$("help").style.display="none"}
+
+function startVoting(){
+ clearInterval(aiTimer);clearInterval(voteTimer);
+ $("menu").style.display="none";$("results").style.display="none";
+ $("layout").style.display="none";$("voting").style.display="flex";
+ chosenMap=MAPS[0];voteSeconds=40;renderChoices();
+ $("timer").textContent=40;
+ voteTimer=setInterval(()=>{
+  $("timer").textContent=--voteSeconds;
+  if(voteSeconds<=0)finishVote();
+ },1000);
+}
+function renderChoices(){
+ $("choices").innerHTML="";
+ MAPS.forEach(m=>{
+  const el=document.createElement("div");
+  el.className="choice"+(m.name===chosenMap.name?" selected":"");
+  el.innerHTML="<div style='font-size:28px'>"+m.emoji+"</div><b>"+m.name+"</b>";
+  el.onclick=()=>{chosenMap=m;renderChoices();$("voteStatus").textContent="Your vote: "+m.name;playTone(600)};
+  $("choices").append(el);
+ });
+}
+function finishVote(){
+ if($("voting").style.display==="none")return;
+ clearInterval(voteTimer);
+ const votes={};MAPS.forEach(m=>votes[m.name]=0);
+ votes[chosenMap.name]++;
+ for(let i=0;i<12;i++)votes[MAPS[Math.floor(Math.random()*MAPS.length)].name]++;
+ let winner=MAPS[0];MAPS.forEach(m=>{if(votes[m.name]>votes[winner.name])winner=m});
+ chosenMap=winner;
+ if(chosenMap.region==="random"){
+  const r=["americas","europe","asia","africa"];
+  chosenMap={...chosenMap,region:r[Math.floor(Math.random()*r.length)]};
+ }
+ $("voting").style.display="none";startGame();
+}
+
+function startGame(){
+ roundFinished=false;selected=null;countries={};layers={};alliances=[];
+ nation={name:$("nationInput").value.trim()||"My Empire",money:10000,soldiers:10000,tanks:100,strength:100};
+ $("layout").style.display="grid";
+ $("roundLabel").textContent="ROUND "+round;
+ $("mapLabel").textContent=chosenMap.name.toUpperCase();
+ $("gameStatus").textContent="Loading...";
+ $("mapError").style.display="none";
+ updateStats();loadMap();
+}
+function loadMap(){
+ if(!window.L){$("mapError").style.display="block";return}
+ if(!map){
+  map=L.map("map").setView([20,0],2);
+  L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",{
+   maxZoom:18,attribution:"© OpenStreetMap © CARTO"
+  }).addTo(map);
+ }
+ setTimeout(()=>map.invalidateSize(),200);
+ const urls=[
+  "https://cdn.jsdelivr.net/gh/nvkelso/natural-earth-vector@master/geojson/ne_110m_admin_0_countries.geojson",
+  "https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_110m_admin_0_countries.geojson"
+ ];
+ getGeo(urls,0);
+}
+async function getGeo(urls,i){
+ try{
+  const r=await fetch(urls[i]);if(!r.ok)throw Error();
+  const d=await r.json();features=d.features.filter(f=>nameOf(f)!=="Antarctica");drawCountries();
+ }catch(e){
+  if(i+1<urls.length)getGeo(urls,i+1);
+  else{$("mapError").style.display="block";$("gameStatus").textContent="Map data unavailable"}
+ }
+}
+function nameOf(f){return f.properties.ADMIN||f.properties.NAME||"Unknown"}
+function regionOf(f){
+ const c=(f.properties.CONTINENT||"").toLowerCase(),r=chosenMap.region;
+ if(r==="all"||r==="random")return true;
+ if(r==="americas")return c.includes("america");
+ return c===r;
+}
+function drawCountries(){
+ if(geo)map.removeLayer(geo);
+ countries={};layers={};
+ const list=features.filter(regionOf);
+ list.forEach(f=>{
+  const n=nameOf(f);
+  countries[n]={owner:null,soldiers:1000+Math.random()*4000|0,tanks:10+Math.random()*30|0,strength:30+Math.random()*70|0,defense:0,money:2000};
+ });
+ geo=L.geoJSON(list,{
+  style:f=>style(nameOf(f)),
+  onEachFeature:(f,l)=>{
+   const n=nameOf(f);layers[n]=l;l.bindTooltip(n,{sticky:true});l.on("click",()=>selectCountry(n));
+  }
+ }).addTo(map);
+ if(geo.getLayers().length)map.fitBounds(geo.getBounds(),{padding:[10,10]});
+ const names=Object.keys(countries).sort(()=>Math.random()-.5);
+ for(let i=0;i<Math.min(names.length,Math.max(1,Math.floor(names.length*.12)));i++)
+  countries[names[i]].owner=AI[i%AI.length];
+ updateMap();updateStats();news("Round "+round+" begins.");
+ $("gameStatus").textContent=names.length+" countries";
+ clearInterval(aiTimer);aiTimer=setInterval(aiTurn,6500);
+ autosave();
+}
+function color(owner){
+ if(!owner)return "#56677c";
+ if(owner==="player")return "#1682f5";
+ return COLORS[Math.max(0,AI.indexOf(owner))%COLORS.length];
+}
+function style(n){return{color:"#b5c9de",weight:.7,fillColor:color(countries[n]?.owner),fillOpacity:.8}}
+function updateMap(){if(geo)geo.setStyle(f=>style(nameOf(f)))}
+function selectCountry(n){
+ selected=n;const c=countries[n];if(!c)return;
+ const owner=c.owner==="player"?nation.name:(c.owner||"Unclaimed");
+ $("countryInfo").innerHTML="<b>"+safe(n)+"</b><br>Owner: "+safe(owner)+
+ "<br>Soldiers: "+fmt(c.soldiers)+"<br>Tanks: "+fmt(c.tanks)+
+ "<br>Strength: "+fmt(c.strength)+"<br>Defense: "+fmt(c.defense);
+ Object.keys(layers).forEach(k=>layers[k].setStyle(style(k)));
+ layers[n].setStyle({weight:3,color:"#fff"});
+ playTone(330,.07);
+}
+function claimCountry(){
+ if(!selected)return alert("Select a country.");
+ const c=countries[selected];
+ if(c.owner==="player")return alert("You already own this country.");
+ if(c.owner)return alert("This country belongs to "+c.owner+". Declare war first.");
+ c.owner="player";nation.money+=500;news(nation.name+" claimed "+selected+".");
+ updateAll();winSound();
+}
+function declareWar(){
+ if(!selected)return alert("Select an enemy country.");
+ const c=countries[selected];
+ if(!c.owner)return claimCountry();
+ if(c.owner==="player")return alert("You own this country.");
+ const enemy=c.owner;
+ const attack=nation.soldiers*.001+nation.tanks*2+nation.strength*2;
+ const defense=c.soldiers*.001+c.tanks*2+c.strength*2+c.defense*5;
+ const chance=Math.max(.08,Math.min(.92,.5+(attack-defense)/(attack+defense+1)));
+ battleSound();
+ if(Math.random()<chance){
+  c.owner="player";c.soldiers=Math.max(100,c.soldiers*.45|0);
+  c.tanks=Math.max(1,c.tanks*.5|0);c.strength=Math.max(15,c.strength*.65|0);
+  nation.soldiers=Math.max(500,nation.soldiers*.85|0);
+  nation.strength+=4;news("VICTORY: You captured "+selected+" from "+enemy+".");winSound();
+ }else{
+  nation.soldiers=Math.max(100,nation.soldiers*.78|0);
+  nation.tanks=Math.max(1,nation.tanks*.9|0);
+  nation.strength=Math.max(10,nation.strength-5);
+  c.soldiers=Math.max(100,c.soldiers*.85|0);
+  news("DEFEAT: "+enemy+" defended "+selected+".");
+ }
+ updateAll();
+}
+function defendCountry(){
+ if(!selected||countries[selected].owner!=="player")return alert("Select your own country.");
+ if(nation.money<500)return alert("Not enough money.");
+ nation.money-=500;countries[selected].defense+=10;countries[selected].strength+=5;
+ news(selected+" improved its defenses.");updateAll();
+}
+function offerPeace(){
+ if(!selected||!countries[selected].owner||countries[selected].owner==="player")return alert("Select an AI country.");
+ const c=countries[selected],ai=c.owner;
+ if(Math.random()<.55){c.owner="player";c.strength=Math.max(10,c.strength-10);news(ai+" signed a peace agreement.");winSound()}
+ else{news(ai+" rejected your peace offer.");playTone(150,.3)}
+ updateAll();
+}
+function recruit(){if(nation.money<500)return alert("Not enough money.");nation.money-=500;nation.soldiers+=1000;news("1,000 soldiers recruited.");updateAll()}
+function buyTanks(){if(nation.money<1000)return alert("Not enough money.");nation.money-=1000;nation.tanks+=10;news("10 tanks purchased.");updateAll()}
+function reinforce(){
+ if(!selected||countries[selected].owner!=="player")return alert("Select your own land.");
+ if(nation.money<500||nation.soldiers<500)return alert("Not enough resources.");
+ nation.money-=500;nation.soldiers-=500;countries[selected].soldiers+=500;
+ countries[selected].strength+=5;news("Reinforcements sent to "+selected+".");updateAll();
+}
+function recover(){
+ if(nation.money<500)return alert("Not enough money.");
+ nation.money-=500;nation.strength+=10;nation.soldiers+=500;updateAll();news("Nation strength recovered.");
+}
+function superpower(){
+ nation.money+=100000;nation.soldiers+=100000;nation.tanks+=1000;nation.strength+=500;
+ updateAll();news("SUPERPOWER MODE ACTIVATED!");winSound();
+}
+function renameNation(){
+ const n=prompt("New nation name:",nation.name);
+ if(n&&n.trim()){nation.name=n.trim().slice(0,24);updateAll();news("Nation renamed.");}
+}
+
+/* Abstract fictional crisis event; no real-world weapon mechanics. */
+function crisisEvent(){
+ if(!selected)return alert("Select an enemy country first.");
+ if(crisisCooldown>Date.now())return alert("Crisis event is on cooldown.");
+ const c=countries[selected];
+ if(!c.owner||c.owner==="player")return alert("Select an AI-owned country.");
+ const target=selected,enemy=c.owner;
+ c.strength=Math.max(5,Math.floor(c.strength*.55));
+ c.soldiers=Math.max(100,Math.floor(c.soldiers*.7));
+ c.tanks=Math.max(0,Math.floor(c.tanks*.7));
+ c.money=Math.max(0,c.money-1000);
+ crisisCooldown=Date.now()+30000;
+ $("crisisStatus").textContent="Crisis event used. Cooldown: 30 seconds.";
+ news("GLOBAL CRISIS: "+target+" suffered major fictional game penalties. Its strength and resources fell.");
+ playTone(65,.8,"sawtooth",.08);
+ setTimeout(()=>playTone(90,.6,"triangle",.07),350);
+ updateAll();
+}
+function aiTurn(){
+ if(roundFinished)return;
+ const names=Object.keys(countries);if(!names.length)return;
+ const neutral=names.filter(n=>!countries[n].owner);
+ if(neutral.length){
+  const target=neutral[Math.random()*neutral.length|0];
+  const ai=AI[Math.random()*AI.length|0];
+  countries[target].owner=ai;news(ai+" claimed "+target+".");
+ }else{
+  const target=names[Math.random()*names.length|0],c=countries[target];
+  if(c.owner&&c.owner!=="player"){
+   const attacker=AI[Math.random()*AI.length|0];
+   if(attacker!==c.owner&&Math.random()<.55){
+    c.owner=attacker;c.soldiers=Math.max(100,c.soldiers*.7|0);
+    news(attacker+" expanded into "+target+".");battleSound();
+   }
+  }else if(c.owner==="player"&&Math.random()<.12){
+   c.strength=Math.max(10,c.strength-2);news("An AI challenged your border near "+target+".");
+  }
+ }
+ Object.values(countries).forEach(c=>{c.soldiers+=Math.random()*80|0;c.strength=Math.min(200,c.strength+1)});
+ nation.money+=50;updateAll();
+}
+function updateAll(){
+ updateStats();updateMap();
+ if(selected)selectCountry(selected);
+ checkEnd();autosave();
+}
+function updateStats(){
+ $("nationName").textContent=nation.name;$("money").textContent=fmt(nation.money);
+ $("soldiers").textContent=fmt(nation.soldiers);$("tanks").textContent=fmt(nation.tanks);
+ $("strength").textContent=fmt(nation.strength);
+ $("land").textContent=Object.values(countries).filter(c=>c.owner==="player").length;
+}
+function news(s){
+ const d=document.createElement("div");d.textContent="• "+s;$("feed").prepend(d);
+ while($("feed").children.length>30)$("feed").lastChild.remove();
+}
+function checkEnd(){
+ const a=Object.values(countries);
+ if(a.length&&a.every(c=>c.owner!==null))endRound();
+}
+function endRound(){
+ if(roundFinished)return;roundFinished=true;clearInterval(aiTimer);
+ const scores={};
+ Object.values(countries).forEach(c=>{if(c.owner)scores[c.owner]=(scores[c.owner]||0)+1});
+ const ranking=Object.entries(scores).sort((a,b)=>b[1]-a[1]);
+ let html="<p>Round "+round+" completed.</p>";
+ ranking.forEach(([owner,count],i)=>{
+  html+="<div class='stat'><span>"+(i+1)+". "+safe(owner==="player"?nation.name:owner)+"</span><b>"+count+" countries</b></div>";
+ });
+ $("resultText").innerHTML=html;$("results").style.display="flex";winSound();round++;
+ autosave();
+}
+
+/* Browser save system */
+function snapshot(){
+ return {
+  nation,round,chosenMap,
+  countries,
+  comments,
+  savedAt:new Date().toISOString()
+ };
+}
+function restore(data){
+ if(!data||!data.nation||!data.countries)return alert("That save is not valid.");
+ nation=data.nation;round=data.round||1;chosenMap=data.chosenMap||MAPS[0];
+ countries=data.countries;comments=data.comments||[];
+ $("nationInput").value=nation.name;
+ $("menu").style.display="none";$("results").style.display="none";
+ $("voting").style.display="none";$("layout").style.display="grid";
+ $("roundLabel").textContent="ROUND "+round;
+ $("mapLabel").textContent=chosenMap.name;
+ updateStats();renderComments();
+ loadMap();
+}
+function readSlots(){
+ try{return JSON.parse(localStorage.getItem("wi_saves")||"{}")}catch(e){return{}}
+}
+function writeSlots(){
+ try{localStorage.setItem("wi_saves",JSON.stringify(saveSlots))}
+ catch(e){alert("Browser storage is full. Delete an old save.");}
+}
+function saveGame(){
+ if(!Object.keys(countries).length)return alert("Start a game first.");
+ const name=$("saveName").value.trim()||"My Game";
+ saveSlots=readSlots();saveSlots[name]=snapshot();writeSlots();
+ $("saveStatus").textContent="Saved: "+name;
+ renderSaves();news("Game saved as "+name+".");
+}
+function autosave(){
+ if(!Object.keys(countries).length)return;
+ try{localStorage.setItem("wi_autosave",JSON.stringify(snapshot()));$("saveStatus").textContent="Autosaved."}
+ catch(e){$("saveStatus").textContent="Autosave unavailable: storage full."}
+}
+function copyGame(){
+ if(!Object.keys(countries).length)return alert("Start or load a game first.");
+ const name=prompt("Name your copied game:","My Game Copy");
+ if(!name)return;
+ saveSlots=readSlots();saveSlots[name]=JSON.parse(JSON.stringify(snapshot()));
+ writeSlots();renderSaves();alert("Game copy saved: "+name);
+}
+function openSaves(){
+ $("savePanel").style.display="flex";
+ saveSlots=readSlots();renderSaves();
+}
+function closeSaves(){$("savePanel").style.display="none"}
+function renderSaves(){
+ const box=$("saveList");box.innerHTML="";
+ const autosaveData=localStorage.getItem("wi_autosave");
+ if(autosaveData){
+  const row=document.createElement("div");row.className="saveRow";
+  const label=document.createElement("span");label.textContent="Automatic Save";
+  const load=document.createElement("button");load.textContent="LOAD";
+  load.onclick=()=>{try{restore(JSON.parse(autosaveData));closeSaves()}catch(e){alert("Save could not be loaded.")}};
+  row.append(label,load);box.append(row);
+ }
+ Object.keys(saveSlots).forEach(name=>{
+  const row=document.createElement("div");row.className="saveRow";
+  const label=document.createElement("span");label.textContent=name;
+  const load=document.createElement("button");load.textContent="LOAD";
+  load.onclick=()=>{restore(saveSlots[name]);closeSaves()};
+  const copy=document.createElement("button");copy.textContent="COPY";
+  copy.onclick=()=>{const n=prompt("Copy name:",name+" Copy");if(n){saveSlots[n]=JSON.parse(JSON.stringify(saveSlots[name]));writeSlots();renderSaves()}};
+  const del=document.createElement("button");del.textContent="DELETE";del.className="red";
+  del.onclick=()=>{if(confirm("Delete "+name+"?")){delete saveSlots[name];writeSlots();renderSaves()}};
+  row.append(label,load,copy,del);box.append(row);
+ });
+}
+function safe(s){
+ return String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+}
+
+/* Persistent local comments and reactions */
+function loadComments(){
+ try{comments=JSON.parse(localStorage.getItem("wi_comments")||"[]")}catch(e){comments=[]}
+ renderComments();
+}
+function postComment(){
+ const username=$("username").value.trim().slice(0,20)||"Player";
+ const message=$("commentInput").value.trim().slice(0,300);
+ if(!message)return alert("Write a comment first.");
+ comments.unshift({id:Date.now()+Math.random(),username,message,likes:0,dislikes:0,liked:false,disliked:false});
+ localStorage.setItem("wi_comments",JSON.stringify(comments));
+ $("commentInput").value="";renderComments();autosave();
+}
+function reactComment(id,type){
+ const c=comments.find(x=>x.id===id);if(!c)return;
+ if(type==="like"){
+  if(c.liked){c.likes--;c.liked=false}
+  else{if(c.disliked){c.dislikes--;c.disliked=false}c.likes++;c.liked=true}
+ }else{
+  if(c.disliked){c.dislikes--;c.disliked=false}
+  else{if(c.liked){c.likes--;c.liked=false}c.dislikes++;c.disliked=true}
+ }
+ localStorage.setItem("wi_comments",JSON.stringify(comments));renderComments();
+}
+function renderComments(){
+ const box=$("community");box.innerHTML="";
+ comments.forEach(c=>{
+  const d=document.createElement("div");d.className="comment";
+  const b=document.createElement("b");b.textContent=c.username;
+  const p=document.createElement("p");p.textContent=c.message;
+  const up=document.createElement("button");up.textContent=(c.liked?"👍 ":"Like ")+c.likes;
+  up.onclick=()=>reactComment(c.id,"like");
+  const down=document.createElement("button");down.textContent=(c.disliked?"👎 ":"Dislike ")+c.dislikes;
+  down.onclick=()=>reactComment(c.id,"dislike");
+  d.append(b,p,up,down);box.append(d);
+ });
+}
+loadComments();
+
+</script>
+</body>
+</html>
